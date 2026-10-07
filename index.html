@@ -1,0 +1,132 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Gastos del Hogar</title>
+  <style>
+    :root { --primary: #2563eb; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+    .container { max-width: 480px; margin: 0 auto; }
+    .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 16px; }
+    h2 { margin-top: 0; font-size: 1.25rem; color: var(--primary); }
+    label { display: block; margin: 12px 0 4px; font-size: 0.9rem; font-weight: 600; }
+    input, select, button { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 1rem; }
+    button { background: var(--primary); color: white; border: none; font-weight: bold; margin-top: 16px; cursor: pointer; }
+    button.secondary { background: #64748b; }
+    .hidden { display: none; }
+    .ticket-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div id="screen-login" class="card">
+    <h2>🔐 Control de Gastos</h2>
+    <label>Selecciona Teléfono:</label>
+    <select id="login-telefono">
+      <option value="644009960">644009960</option>
+      <option value="671215286">671215286</option>
+    </select>
+    <label>PIN de Acceso:</label>
+    <input type="password" id="login-pin" maxlength="4" placeholder="1234">
+    <button onclick="ejecutarLogin()">Entrar</button>
+  </div>
+  <div id="screen-cambiar-pin" class="card hidden">
+    <h2>🔑 Primer Acceso: Cambia tu PIN</h2>
+    <p>Por seguridad, introduce un nuevo PIN de 4 dígitos.</p>
+    <label>Nuevo PIN:</label>
+    <input type="password" id="nuevo-pin" maxlength="4">
+    <button onclick="ejecutarCambioPin()">Guardar Nuevo PIN</button>
+  </div>
+  <div id="screen-main" class="card hidden">
+    <h2>🏠 Registrar Gasto</h2>
+    <label>Supermercado / Comercio:</label>
+    <input type="text" id="gasto-comercio" placeholder="Ej. Mercadona, BonÀrea...">
+    <label>Importe Total (€):</label>
+    <input type="number" step="0.01" id="gasto-total" placeholder="0.00">
+    <label>Fecha:</label>
+    <input type="date" id="gasto-fecha">
+    <button onclick="guardarGasto()">Guardar Gasto</button>
+    <hr style="margin: 24px 0; border: none; border-top: 1px solid #e2e8f0;">
+    <h3>📊 Últimos Gastos</h3>
+    <div id="lista-gastos">Cargando gastos...</div>
+    <button onclick="mostrarCambioPinMenu()" class="secondary">⚙️ Cambiar PIN desde Menú</button>
+  </div>
+</div>
+<script>
+  const API_URL = 'https://TU-BACKEND.onrender.com/api'; 
+  let usuarioActual = null;
+  document.getElementById('gasto-fecha').valueAsDate = new Date();
+
+  async function ejecutarLogin() {
+    const telefono = document.getElementById('login-telefono').value;
+    const pin = document.getElementById('login-pin').value;
+    const res = await fetch(`${API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefono, pin })
+:\app-gastos\
+    });
+    const data = await res.json();
+    if (!res.ok) return alert(data.error);
+    usuarioActual = data;
+    document.getElementById('screen-login').classList.add('hidden');
+    if (data.debeCambiarPin) {
+      document.getElementById('screen-cambiar-pin').classList.remove('hidden');
+    } else {
+      cargarPanelPrincipal();
+    }
+  }
+
+  async function ejecutarCambioPin() {
+    const nuevoPin = document.getElementById('nuevo-pin').value;
+    if (nuevoPin.length < 4) return alert('El PIN debe tener 4 dígitos');
+    await fetch(`${API_URL}/cambiar-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefono: usuarioActual.telefono, nuevoPin })
+    });
+    alert('PIN actualizado con éxito');
+    document.getElementById('screen-cambiar-pin').classList.add('hidden');
+    cargarPanelPrincipal();
+  }
+
+  function cargarPanelPrincipal() {
+    document.getElementById('screen-main').classList.remove('hidden');
+    obtenerGastos();
+  }
+
+  async function guardarGasto() {
+    const comercio = document.getElementById('gasto-comercio').value;
+    const total = document.getElementById('gasto-total').value;
+    const fecha = document.getElementById('gasto-fecha').value;
+    if (!comercio || !total) return alert('Rellena todos los campos');
+    await fetch(`${API_URL}/gastos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuarioId: usuarioActual.id, comercio, total, fecha })
+    });
+    document.getElementById('gasto-comercio').value = '';
+    document.getElementById('gasto-total').value = '';
+    obtenerGastos();
+  }
+
+  async function obtenerGastos() {
+    const res = await fetch(`${API_URL}/gastos`);
+    const gastos = await res.json();
+    const contenedor = document.getElementById('lista-gastos');
+    contenedor.innerHTML = gastos.map(g => `
+      <div class="ticket-item">
+        <div><strong>${g.comercio}</strong><br><small>${new Date(g.fecha).toLocaleDateString()}</small></div>
+        <div><strong>${Number(g.total).toFixed(2)} €</strong></div>
+      </div>
+    `).join('');
+  }
+
+  function mostrarCambioPinMenu() {
+    document.getElementById('screen-main').classList.add('hidden');
+    document.getElementById('screen-cambiar-pin').classList.remove('hidden');
+  }
+</script>
+</body>
+</html>
